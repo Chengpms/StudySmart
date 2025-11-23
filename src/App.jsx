@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInAnonymously, 
+  signInWithPopup, 
+  GoogleAuthProvider,
+  signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
 import { 
@@ -26,10 +28,12 @@ import {
   Lightbulb, 
   Play, 
   Square, 
-  CheckSquare 
+  CheckSquare,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 
-// --- TU CONFIGURACIÓN DE FIREBASE INTEGRADA ---
+// --- TU CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyAscXU-OzIudkHNMSS701XmHtVMsehutSI",
   authDomain: "studymaster-20233.firebaseapp.com",
@@ -40,10 +44,11 @@ const firebaseConfig = {
   measurementId: "G-7K467EK825"
 };
 
-// Inicializar Firebase (Una sola vez)
+// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 // --- COLORES & ESTILOS ---
 const COLORS = {
@@ -66,7 +71,8 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
     primary: `bg-blue-600 hover:bg-blue-700 text-white`,
     purple: "bg-purple-600 hover:bg-purple-700 text-white",
     danger: "bg-red-500 hover:bg-red-600 text-white",
-    ghost: "bg-transparent hover:bg-slate-100 text-slate-600 border border-slate-300"
+    ghost: "bg-transparent hover:bg-slate-100 text-slate-600 border border-slate-300",
+    google: "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50"
   };
   return (
     <button 
@@ -82,6 +88,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
 // --- APP PRINCIPAL ---
 export default function StudyMasterWeb() {
   const [user, setUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Datos
@@ -90,17 +97,23 @@ export default function StudyMasterWeb() {
   const [history, setHistory] = useState([]);
   const [todos, setTodos] = useState([]);
 
-  // Auth y Carga de Datos
+  // Auth Listener
   useEffect(() => {
-    signInAnonymously(auth).catch((error) => {
-      console.error("Error de autenticación:", error);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoadingAuth(false);
     });
-    return onAuthStateChanged(auth, setUser);
+    return unsub;
   }, []);
 
+  // Carga de Datos (Solo si hay usuario)
   useEffect(() => {
-    if (!user) return;
-    // Escuchar colecciones en tiempo real bajo la ID del usuario
+    if (!user) {
+        setSubjects([]); setExams([]); setHistory([]); setTodos([]);
+        return;
+    }
+    
+    // Sincronización en tiempo real vinculada al UID del usuario
     const unsubSub = onSnapshot(collection(db, 'users', user.uid, 'subjects'), s => setSubjects(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubExams = onSnapshot(collection(db, 'users', user.uid, 'exams'), s => setExams(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubHist = onSnapshot(collection(db, 'users', user.uid, 'history'), s => setHistory(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -109,21 +122,51 @@ export default function StudyMasterWeb() {
     return () => { unsubSub(); unsubExams(); unsubHist(); unsubTodos(); };
   }, [user]);
 
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error(error);
+      alert("Error al iniciar sesión: " + error.message);
+    }
+  };
+
+  const handleLogout = () => signOut(auth);
+
+  // --- PANTALLA DE LOGIN ---
+  if (loadingAuth) return <div className="flex h-screen items-center justify-center text-slate-500">Cargando...</div>;
+
   if (!user) return (
-    <div className="flex h-screen items-center justify-center bg-slate-50 flex-col gap-4">
-      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      <div className="text-slate-500 font-medium">Conectando a la nube...</div>
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
+        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <LogIn size={32} />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">Bienvenido a StudyMaster</h1>
+        <p className="text-slate-500 mb-8">Tu centro de estudio inteligente, sincronizado en todos tus dispositivos.</p>
+        
+        <Button onClick={handleLogin} variant="google" className="w-full flex items-center justify-center gap-3 py-3 text-lg shadow-sm">
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="Google" />
+          Continuar con Google
+        </Button>
+        <p className="text-xs text-slate-400 mt-6">Tus datos se guardarán de forma segura en la nube.</p>
+      </div>
     </div>
   );
 
+  // --- APP LOGUEADA ---
   return (
     <div className={`min-h-screen ${COLORS.bg} flex flex-col md:flex-row font-sans text-slate-800`}>
       {/* Navegación */}
       <nav className="md:w-64 bg-slate-900 text-slate-300 flex md:flex-col justify-between md:h-screen sticky bottom-0 md:top-0 z-50 order-2 md:order-1">
         <div className="p-4 hidden md:block">
           <h1 className="text-2xl font-bold text-white">StudyMaster</h1>
-          <p className="text-xs text-slate-500">v15 Cloud Edition</p>
+          <div className="flex items-center gap-2 mt-2">
+            <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full" />
+            <p className="text-xs text-slate-400 truncate">{user.displayName}</p>
+          </div>
         </div>
+        
         <div className="flex md:flex-col flex-1 justify-around md:justify-start md:px-2 overflow-x-auto no-scrollbar">
           <NavBtn id="dashboard" icon={LayoutDashboard} label="Dashboard" active={activeTab} set={setActiveTab} />
           <NavBtn id="todo" icon={ListTodo} label="Planificador" active={activeTab} set={setActiveTab} />
@@ -132,10 +175,21 @@ export default function StudyMasterWeb() {
           <NavBtn id="stats" icon={BarChart3} label="Estadísticas" active={activeTab} set={setActiveTab} />
           <NavBtn id="config" icon={Settings} label="Configuración" active={activeTab} set={setActiveTab} />
         </div>
+
+        <div className="hidden md:block p-4">
+            <button onClick={handleLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm">
+                <LogOut size={16} /> Cerrar Sesión
+            </button>
+        </div>
       </nav>
 
       {/* Contenido */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen order-1 md:order-2">
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto h-screen order-1 md:order-2 relative">
+        {/* Botón Logout Móvil */}
+        <div className="md:hidden absolute top-4 right-4 z-10">
+             <button onClick={handleLogout} className="p-2 bg-white rounded-full shadow text-slate-600"><LogOut size={20}/></button>
+        </div>
+
         {activeTab === 'dashboard' && <DashboardView subjects={subjects} exams={exams} />}
         {activeTab === 'todo' && <TodoView subjects={subjects} exams={exams} todos={todos} userId={user.uid} />}
         {activeTab === 'calendar' && <CalendarView subjects={subjects} exams={exams} userId={user.uid} />}
@@ -154,7 +208,7 @@ const NavBtn = ({ id, icon: Icon, label, active, set }) => (
   </button>
 );
 
-// --- VISTAS ---
+// --- VISTAS (IGUAL QUE v15) ---
 
 // 1. DASHBOARD
 const DashboardView = ({ subjects, exams }) => {
@@ -164,42 +218,31 @@ const DashboardView = ({ subjects, exams }) => {
       .map(e => ({ ...e, d: new Date(e.date.split('/').reverse().join('-')) }))
       .filter(e => e.d >= today).sort((a,b) => a.d - b.d);
     
-    // ESTADO POR DEFECTO: Pendiente (Amarillo/Naranja)
     if (!subExams.length) return { label: "⚠️ No al día", color: "text-amber-600 bg-amber-50", days: 999 };
-    
     const days = Math.ceil((subExams[0].d - today) / (86400000));
-    
     if (days <= 3) return { label: "🚨 CRÍTICO", color: "text-red-600 bg-red-50", days };
     if (days <= 7) return { label: "🔥 Urgente", color: "text-orange-600 bg-orange-50", days };
-    if (days <= 15) return { label: "📅 Preparar", color: "text-blue-600 bg-blue-50", days };
-    
-    // Si el examen está lejos, sigue mostrando "No al día" para motivar
     return { label: "⚠️ No al día", color: "text-amber-600 bg-amber-50", days };
   };
 
   const suggest = () => {
     if(!subjects.length) return alert("Añade asignaturas primero.");
-    // Lógica Coach
     let best = null, maxScore = -1;
     subjects.forEach(s => {
       const st = getStatus(s.name);
       let sc = (s.difficulty || 2) * 10;
-      if (st.days <= 2) sc *= 10;
-      else if (st.days <= 7) sc *= 5;
-      else if (st.days <= 15) sc *= 2;
-      else sc *= 1.5; // Default push
+      if (st.days <= 2) sc *= 10; else if (st.days <= 7) sc *= 5; else sc *= 1.5;
       if(sc > maxScore) { maxScore = sc; best = s; }
     });
     if(best) alert(`🤖 EL COACH SUGIERE:\n\n👉 ${best.name.toUpperCase()}\n\nEs tu prioridad actual por dificultad y urgencia.`);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300 pt-10 md:pt-0">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">Dashboard Global</h2>
         <Button variant="purple" onClick={suggest} className="flex gap-2 items-center text-sm"><Lightbulb size={16}/> Coach IA</Button>
       </div>
-      
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {subjects.map(s => {
           const st = getStatus(s.name);
@@ -243,11 +286,9 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     const sels = Object.keys(sel).filter(k => sel[k]);
     const targets = sels.length > 0 ? sels : subjects.map(s => s.name);
     if (!targets.length) return alert("No hay asignaturas configuradas.");
-    
     const totalMins = hours * 60;
     let scores = {};
     const today = new Date(); today.setHours(0,0,0,0);
-
     targets.forEach(name => {
       const s = subjects.find(sb => sb.name === name);
       if(!s) return;
@@ -258,21 +299,16 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
          const diff = Math.ceil((d - today)/86400000);
          if(diff >= 0) minDays = Math.min(minDays, diff);
       });
-      if(minDays <= 2) base *= 10;
-      else if(minDays <= 7) base *= 4;
+      if(minDays <= 2) base *= 10; else if(minDays <= 7) base *= 4;
       scores[name] = base; 
     });
-    
     const totalP = Object.values(scores).reduce((a,b)=>a+b, 0) || 1;
-    
     for (const name of targets) {
       if(!scores[name]) continue;
       const mins = Math.floor(totalMins * (scores[name] / totalP));
       if (mins < 15 && scores[name] < 50) continue;
-      
       const s = subjects.find(sb => sb.name === name);
       const ratioT = s?.ratio || 0.5;
-      
       const tasks = [];
       if (ratioT > 0.8) tasks.push({t:'Teoría', m: mins});
       else if (ratioT < 0.2) tasks.push({t:'Práctica', m: mins});
@@ -282,10 +318,7 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
         if(tT >= 15) tasks.push({t:'Teoría', m: tT});
         if(tP >= 15) tasks.push({t:'Práctica', m: tP});
       }
-
-      for(let task of tasks) {
-        await addDoc(collection(db, 'users', userId, 'todos'), { subject: name, type: task.t, mins: task.m, done: false });
-      }
+      for(let task of tasks) await addDoc(collection(db, 'users', userId, 'todos'), { subject: name, type: task.t, mins: task.m, done: false });
     }
   };
 
@@ -295,7 +328,7 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
   }, [todos]);
 
   return (
-    <div className="grid md:grid-cols-3 gap-6 h-full animate-in fade-in duration-300">
+    <div className="grid md:grid-cols-3 gap-6 h-full animate-in fade-in duration-300 pt-10 md:pt-0">
       <div className="md:col-span-1 space-y-4">
         <Card>
           <h3 className="font-bold mb-4 text-slate-700">Generador de Rutina</h3>
@@ -317,7 +350,6 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
           <Button onClick={gen} className="w-full">⚡ Generar Tareas</Button>
         </Card>
       </div>
-
       <div className="md:col-span-2 flex flex-col h-full">
         <div className="mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex justify-between text-sm font-bold mb-2">
@@ -328,7 +360,6 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
             <div className="h-full bg-emerald-500 transition-all duration-500" style={{width: `${progress}%`}}></div>
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto space-y-3 bg-white p-4 rounded-xl shadow-inner border border-slate-200">
           {!todos.length && <div className="text-center text-slate-400 mt-10">Lista vacía. Genera una rutina.</div>}
           {todos.map(t => (
@@ -352,7 +383,6 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
 const CalendarView = ({ subjects, exams, userId }) => {
   const [date, setDate] = useState("");
   const [sub, setSub] = useState("");
-  
   const add = async () => {
     if(!sub || !date) return alert("Faltan datos");
     const dObj = new Date(date);
@@ -361,9 +391,8 @@ const CalendarView = ({ subjects, exams, userId }) => {
     setSub("");
     alert("Examen añadido");
   };
-
   return (
-    <div className="grid md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+    <div className="grid md:grid-cols-2 gap-6 animate-in fade-in duration-300 pt-10 md:pt-0">
       <Card>
         <h3 className="font-bold mb-4 text-lg">Añadir Examen</h3>
         <div className="space-y-4">
@@ -381,7 +410,6 @@ const CalendarView = ({ subjects, exams, userId }) => {
           <Button onClick={add} className="w-full">Guardar Examen</Button>
         </div>
       </Card>
-      
       <Card className="h-full overflow-hidden flex flex-col">
         <h3 className="font-bold mb-4 text-lg">Próximos Exámenes</h3>
         <div className="overflow-y-auto flex-1 space-y-2 pr-1">
@@ -472,7 +500,7 @@ const StatsView = ({ subjects, history }) => {
   const total = Object.values(data).reduce((a,b)=>a+b,0);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300 pt-10 md:pt-0">
       <div className="bg-slate-900 text-white p-6 rounded-xl shadow-lg flex items-center justify-between">
         <div>
           <div className="text-slate-400 text-xs font-bold uppercase mb-1">Tiempo Total Acumulado</div>
@@ -527,7 +555,7 @@ const ConfigView = ({ subjects, exams, userId }) => {
   };
 
   return (
-    <div className="grid md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+    <div className="grid md:grid-cols-2 gap-6 animate-in fade-in duration-300 pt-10 md:pt-0">
       <Card className="space-y-5">
         <h3 className="font-bold text-lg border-b pb-2 flex items-center gap-2">
           <Plus className="text-blue-600" size={20}/> Crear / Editar

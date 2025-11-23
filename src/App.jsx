@@ -29,7 +29,7 @@ import {
   CheckSquare 
 } from 'lucide-react';
 
-// --- TU CONFIGURACIÓN DE FIREBASE (CORRECTA) ---
+// --- TU CONFIGURACIÓN DE FIREBASE INTEGRADA ---
 const firebaseConfig = {
   apiKey: "AIzaSyAscXU-OzIudkHNMSS701XmHtVMsehutSI",
   authDomain: "studymaster-20233.firebaseapp.com",
@@ -40,7 +40,7 @@ const firebaseConfig = {
   measurementId: "G-7K467EK825"
 };
 
-// Inicializar Firebase una sola vez
+// Inicializar Firebase (Una sola vez)
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -156,7 +156,7 @@ const NavBtn = ({ id, icon: Icon, label, active, set }) => (
 
 // --- VISTAS ---
 
-// 1. DASHBOARD (Estado por defecto modificado a "No al día")
+// 1. DASHBOARD
 const DashboardView = ({ subjects, exams }) => {
   const getStatus = (subjName) => {
     const today = new Date(); today.setHours(0,0,0,0);

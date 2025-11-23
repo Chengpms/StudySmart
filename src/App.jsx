@@ -18,23 +18,27 @@ import {
   LayoutDashboard, Calendar as CalIcon, ListTodo, Timer, BarChart3, Settings, Plus, Trash2, Lightbulb, Play, Square, CheckSquare 
 } from 'lucide-react';
 
-// --- ⚠️ PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE (Del Paso 1) ---
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  projectId: "TU_PROYECTO",
-  storageBucket: "TU_PROYECTO.appspot.com",
-  messagingSenderId: "NUMEROS",
-  appId: "NUMEROS"
+  apiKey: "AIzaSyAscXU-OzIudkHNMSS701XmHtVMsehutSI",
+  authDomain: "studymaster-20233.firebaseapp.com",
+  projectId: "studymaster-20233",
+  storageBucket: "studymaster-20233.firebasestorage.app",
+  messagingSenderId: "123202181282",
+  appId: "1:123202181282:web:dd519d692dc65552539ffb",
+  measurementId: "G-7K467EK825"
 };
-// -------------------------------------------------------------
 
-// Inicializar Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = "studymaster-v15"; // Identificador fijo para tu app
-
+const analytics = getAnalytics(app);
 // --- COLORES & ESTILOS ---
 const COLORS = {
   bg: "bg-slate-50",
@@ -382,3 +386,4 @@ const ConfigView = ({ subjects, userId }) => {
     </div>
   );
 };
+

@@ -42,7 +42,8 @@ import {
   Trophy,
   TrendingUp,
   Clock,
-  CalendarDays
+  CalendarDays,
+  Palette
 } from 'lucide-react';
 
 // --- TU CONFIGURACIÓN DE FIREBASE ---
@@ -83,8 +84,22 @@ const SUBJECT_COLORS = [
   { name: 'rose', bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-200', fill: '#F43F5E', ring: 'ring-rose-500', bar: 'bg-rose-500' }
 ];
 
-const getSubjectColor = (name) => {
+// Función inteligente para obtener estilo
+// 1. Si la asignatura tiene un color guardado, usa ese.
+// 2. Si no, genera uno basado en el hash del nombre.
+const getSubjectStyle = (subjectOrName) => {
+  if (!subjectOrName) return SUBJECT_COLORS[0];
+  
+  // Si es un objeto y tiene color definido
+  if (typeof subjectOrName === 'object' && subjectOrName.color) {
+    const found = SUBJECT_COLORS.find(c => c.name === subjectOrName.color);
+    if (found) return found;
+  }
+  
+  // Fallback: Hash del nombre
+  const name = typeof subjectOrName === 'object' ? subjectOrName.name : subjectOrName;
   if (!name) return SUBJECT_COLORS[0];
+
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -128,7 +143,7 @@ const Button = ({ children, onClick, variant = "primary", className = "", disabl
   );
 };
 
-// --- LÓGICA DE RECOMENDACIÓN CENTRALIZADA ---
+// --- LÓGICA DE RECOMENDACIÓN ---
 const calculatePriority = (subject, exams) => {
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -202,6 +217,8 @@ export default function StudyMasterWeb() {
     catch (e) { alert(e.message); }
   };
 
+  const handleLogout = () => signOut(auth);
+
   if (loadingAuth) return <div className="flex h-screen items-center justify-center text-slate-500">Cargando...</div>;
 
   if (!user) return (
@@ -252,7 +269,7 @@ export default function StudyMasterWeb() {
         </div>
 
         <div className="hidden md:block p-4">
-            <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded hover:bg-slate-800">
+            <button onClick={handleLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded hover:bg-slate-800">
                 <LogOut size={16} /> Cerrar Sesión
             </button>
         </div>
@@ -321,9 +338,9 @@ const DashboardView = ({ subjects, exams }) => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {subjects.map(s => {
           const st = getStatus(s.name);
-          const color = getSubjectColor(s.name);
+          const style = getSubjectStyle(s);
           return (
-            <Card key={s.id} className={`hover:shadow-lg border-l-4 ${color.border}`} style={{ borderLeftColor: color.fill }}>
+            <Card key={s.id} className={`hover:shadow-lg border-l-4 ${style.border}`} style={{ borderLeftColor: style.fill }}>
               <div className="flex justify-between mb-3 items-start">
                 <h3 className="font-bold text-lg text-slate-800">{s.name}</h3>
                 <span className={`px-2 py-1 rounded text-xs font-bold border ${st.color}`}>{st.label}</span>
@@ -431,7 +448,12 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
             <div className="max-h-60 overflow-y-auto border border-slate-200 p-2 rounded-lg bg-slate-50">
               {subjects.map(s => (
                 <label key={s.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors">
-                  <input type="checkbox" checked={!!sel[s.name]} onChange={()=>toggleSel(s.name)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
+                  <input 
+                    type="checkbox" 
+                    checked={!!sel[s.name]} 
+                    onChange={()=>toggleSel(s.name)} 
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" 
+                  />
                   <span className="text-sm font-medium text-slate-700">{s.name}</span>
                 </label>
               ))}
@@ -450,16 +472,17 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
         <div className="flex-1 overflow-y-auto space-y-3 bg-white p-4 rounded-xl shadow-inner border border-slate-200 custom-scrollbar">
           {!todos.length && <div className="text-center text-slate-400 mt-10">Lista vacía</div>}
           {todos.map(t => {
-            const color = getSubjectColor(t.subject);
+            const sub = subjects.find(s => s.name === t.subject);
+            const style = getSubjectStyle(sub || t.subject);
             return (
-            <div key={t.id} onClick={()=>updateDoc(doc(db, 'users', userId, 'todos', t.id), {done: !t.done})} className={`p-4 rounded-xl border cursor-pointer flex items-center gap-4 transition-all duration-200 ${t.done ? 'bg-slate-50 border-slate-100 opacity-75' : 'bg-white hover:shadow-md'}`} style={{ borderLeftColor: color.fill, borderLeftWidth: '4px' }}>
+            <div key={t.id} onClick={()=>updateDoc(doc(db, 'users', userId, 'todos', t.id), {done: !t.done})} className={`p-4 rounded-xl border cursor-pointer flex items-center gap-4 transition-all duration-200 ${t.done ? 'bg-slate-50 border-slate-100 opacity-75' : 'bg-white hover:shadow-md'}`} style={{ borderLeftColor: style.fill, borderLeftWidth: '4px' }}>
               <div className={`w-6 h-6 rounded border flex items-center justify-center ${t.done ? 'bg-green-500 border-green-500' : ''}`}>
                 {t.done && <CheckSquare size={16} className="text-white"/>}
               </div>
               <div>
                 <div className={`font-bold ${t.done && 'line-through'}`}>{t.subject}</div>
                 <div className="text-xs text-slate-500 flex gap-2 items-center">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${color.bg} ${color.text}`}>{t.type}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${style.bg} ${style.text}`}>{t.type}</span>
                     <span>{t.mins} min</span>
                 </div>
               </div>
@@ -527,9 +550,10 @@ const CalendarView = ({ subjects, exams, userId }) => {
         </div>
         <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar mt-1">
           {dayExams.map(e => {
-            const color = getSubjectColor(e.subject);
+            const sub = subjects.find(s => s.name === e.subject);
+            const style = getSubjectStyle(sub || e.subject);
             return (
-            <div key={e.id} className={`text-[11px] ${color.bg} ${color.text} px-2 py-1 rounded border-l-4 ${color.border} font-bold shadow-sm flex justify-between items-center group/exam transition-all hover:shadow-md truncate`} style={{ borderLeftColor: color.fill }}>
+            <div key={e.id} className={`text-[11px] ${style.bg} ${style.text} px-2 py-1 rounded border-l-4 ${style.border} font-bold shadow-sm flex justify-between items-center group/exam transition-all hover:shadow-md truncate`} style={{ borderLeftColor: style.fill }}>
               <span className="truncate w-full">{e.subject}</span>
               <button onClick={(ev) => { ev.stopPropagation(); deleteExam(e.id); }} className="opacity-0 group-hover/exam:opacity-100 hover:text-red-700 rounded p-0.5 transition-all"><Trash2 size={14} /></button>
             </div>
@@ -571,9 +595,10 @@ const CalendarView = ({ subjects, exams, userId }) => {
           <h3 className="font-bold mb-3 text-sm uppercase text-slate-400 border-b pb-2">Lista de Eventos</h3>
           <div className="space-y-2 flex-1 overflow-y-auto pr-1 custom-scrollbar">
             {exams.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-'))).map(e => {
-              const color = getSubjectColor(e.subject);
+              const sub = subjects.find(s => s.name === e.subject);
+              const style = getSubjectStyle(sub || e.subject);
               return (
-              <div key={e.id} className={`flex justify-between items-center p-3 bg-white rounded-lg border hover:shadow-md group transition-all ${color.bg}`} style={{ borderLeft: `4px solid ${color.fill}` }}>
+              <div key={e.id} className={`flex justify-between items-center p-3 bg-white rounded-lg border hover:shadow-md group transition-all ${style.bg}`} style={{ borderLeft: `4px solid ${style.fill}` }}>
                 <div><div className="font-bold text-sm text-slate-700">{e.subject}</div><div className="text-xs text-slate-400 font-mono bg-white/50 px-1.5 py-0.5 rounded inline-block mt-1">{e.date}</div></div>
                 <button onClick={() => deleteExam(e.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full transition-all"><Trash2 size={16} /></button>
               </div>
@@ -636,6 +661,8 @@ const TimerView = ({ subjects, exams, userId }) => {
     return `${h}:${m}:${s}`;
   };
 
+  const currentStyle = getSubjectStyle(subjects.find(s => s.name === sel) || sel);
+
   return (
     <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto text-center animate-in zoom-in duration-300">
       {!isActive ? (
@@ -646,7 +673,7 @@ const TimerView = ({ subjects, exams, userId }) => {
               <Flame className="text-orange-500 shrink-0 mt-1" />
               <div>
                 <div className="font-bold text-amber-900 text-sm uppercase tracking-wide">Recomendación Prioritaria</div>
-                <div className="font-bold text-slate-800 text-lg" style={{color: getSubjectColor(bestSubject.name).fill}}>{bestSubject.name}</div>
+                <div className="font-bold text-slate-800 text-lg" style={{color: getSubjectStyle(bestSubject).fill}}>{bestSubject.name}</div>
                 <p className="text-xs text-amber-700 mt-1">{bestSubject.reason}</p>
                 <button onClick={() => setSel(bestSubject.name)} className="text-xs text-blue-600 hover:underline mt-2 font-medium">Seleccionar esta asignatura</button>
               </div>
@@ -666,7 +693,7 @@ const TimerView = ({ subjects, exams, userId }) => {
       ) : (
         <div className="w-full space-y-8">
           <div>
-            <div className={`text-2xl font-bold mb-4 animate-pulse bg-slate-50 inline-block px-4 py-1 rounded-full`} style={{ color: getSubjectColor(sel).fill }}>{sel}</div>
+            <div className={`text-2xl font-bold mb-4 animate-pulse bg-slate-50 inline-block px-4 py-1 rounded-full`} style={{ color: currentStyle.fill, backgroundColor: currentStyle.bg.replace('bg-', 'bg-opacity-20 bg-') }}>{sel}</div>
             <div className={`text-[5rem] md:text-[7rem] font-mono font-bold text-slate-800 leading-none tracking-tighter drop-shadow-sm ${isPaused ? 'opacity-50' : ''}`}>{formatTime(elapsed)}</div>
             {isPaused && <div className="text-amber-500 font-bold uppercase tracking-widest mt-2">En Pausa</div>}
           </div>
@@ -716,6 +743,8 @@ const StatsView = ({ subjects, history }) => {
   }, [history]);
 
   if(!stats) return <div className="text-center mt-20 text-slate-400">Sin datos aún</div>;
+  
+  const topStyle = getSubjectStyle(subjects.find(s => s.name === stats.top) || stats.top);
 
   return (
     <div className="space-y-6 pt-4 pb-10">
@@ -730,7 +759,7 @@ const StatsView = ({ subjects, history }) => {
         </div>
         <div className="bg-white p-5 rounded-xl border flex items-center gap-4">
             <div className="p-3 bg-purple-50 text-purple-600 rounded"><Trophy size={24}/></div>
-            <div><div className="text-xs text-slate-500 font-bold">TOP ASIGNATURA</div><div className="text-xl font-bold truncate max-w-[120px]" style={{color: getSubjectColor(stats.top).fill}}>{stats.top}</div></div>
+            <div><div className="text-xs text-slate-500 font-bold">TOP ASIGNATURA</div><div className="text-xl font-bold truncate max-w-[120px]" style={{color: topStyle.fill}}>{stats.top}</div></div>
         </div>
       </div>
 
@@ -751,11 +780,12 @@ const StatsView = ({ subjects, history }) => {
         <h3 className="font-bold mb-4">Desglose</h3>
         <div className="space-y-4">
             {stats.bd.map(i=>{
-                const c = getSubjectColor(i.n);
+                const sub = subjects.find(s => s.name === i.n);
+                const style = getSubjectStyle(sub || i.n);
                 return (
                 <div key={i.n}>
                     <div className="flex justify-between text-sm mb-1 font-bold text-slate-700"><span>{i.n}</span><span className="text-slate-400 text-xs font-normal">{i.m}m ({i.s} ses)</span></div>
-                    <div className="h-2 bg-slate-100 rounded overflow-hidden"><div className="h-full" style={{width:`${i.p}%`, backgroundColor: c.fill}}></div></div>
+                    <div className="h-2 bg-slate-100 rounded overflow-hidden"><div className="h-full" style={{width:`${i.p}%`, backgroundColor: style.fill}}></div></div>
                 </div>
             )})}
         </div>
@@ -769,14 +799,15 @@ const ConfigView = ({ subjects, exams, userId }) => {
   const [name, setName] = useState("");
   const [diff, setDiff] = useState(2);
   const [ratio, setRatio] = useState(50);
+  const [color, setColor] = useState(SUBJECT_COLORS[0].name);
 
   const save = async () => {
     if(!name) return;
     const exist = subjects.find(s => s.name.toLowerCase() === name.toLowerCase());
-    const data = { name, difficulty: Number(diff), ratio: ratio/100 };
+    const data = { name, difficulty: Number(diff), ratio: ratio/100, color };
     if(exist) await updateDoc(doc(db, 'users', userId, 'subjects', exist.id), data);
     else await addDoc(collection(db, 'users', userId, 'subjects'), data);
-    setName(""); alert("Guardado");
+    setName(""); setColor(SUBJECT_COLORS[0].name); alert("Guardado");
   };
 
   const del = async (id, n) => {
@@ -796,6 +827,19 @@ const ConfigView = ({ subjects, exams, userId }) => {
           <div className="flex gap-2 mt-1">{[1,2,3].map(d=><button key={d} onClick={()=>setDiff(d)} className={`flex-1 py-2 border rounded ${diff===d?'bg-blue-600 text-white':''}`}>{d}</button>)}</div>
         </div>
         <div>
+            <label className="text-xs font-bold mb-2 block">Color</label>
+            <div className="flex flex-wrap gap-2">
+                {SUBJECT_COLORS.map(c => (
+                    <button 
+                        key={c.name} 
+                        onClick={() => setColor(c.name)}
+                        className={`w-6 h-6 rounded-full border-2 transition-transform ${color === c.name ? 'scale-125 border-slate-600' : 'border-transparent hover:scale-110'}`}
+                        style={{ backgroundColor: c.fill }}
+                    />
+                ))}
+            </div>
+        </div>
+        <div>
           <label className="text-xs font-bold">Teoría {ratio}%</label>
           <input type="range" min="0" max="100" value={ratio} onChange={e=>setRatio(e.target.value)} className="w-full" />
         </div>
@@ -804,12 +848,11 @@ const ConfigView = ({ subjects, exams, userId }) => {
       <Card>
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
           {subjects.map(s => {
-            const c = getSubjectColor(s.name);
-            return (
-            <div key={s.id} className={`flex justify-between p-3 border rounded items-center ${c.bg} ${c.border}`}>
-              <div><div className={`font-bold ${c.text}`}>{s.name}</div><div className="text-xs text-slate-500">Dif: {s.difficulty}</div></div>
+             const style = getSubjectStyle(s);
+             return (
+            <div key={s.id} className={`flex justify-between p-3 border rounded items-center ${style.bg} ${style.border}`} onClick={() => {setName(s.name); setDiff(s.difficulty); setRatio((s.ratio||0.5)*100); setColor(s.color || 'blue')}}>
+              <div><div className={`font-bold ${style.text}`}>{s.name}</div><div className="text-xs text-slate-500">Dif: {s.difficulty}</div></div>
               <div className="flex gap-2">
-                <button onClick={()=>{setName(s.name); setDiff(s.difficulty); setRatio((s.ratio||0.5)*100)}} className="text-blue-500"><Settings size={16}/></button>
                 <button onClick={()=>del(s.id, s.name)} className="text-red-500"><Trash2 size={16}/></button>
               </div>
             </div>

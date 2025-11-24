@@ -15,7 +15,9 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
-  onSnapshot
+  onSnapshot, 
+  query, 
+  where 
 } from 'firebase/firestore';
 import { 
   LayoutDashboard, 
@@ -484,51 +486,74 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
   );
 };
 
-// 3. CALENDARIO
+// 3. CALENDARIO (FIXED GRID & WHITE BACKGROUND)
 const CalendarView = ({ subjects, exams, userId }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDateStr, setSelectedDateStr] = useState(new Date().toLocaleDateString('es-ES'));
+  const [selectedDateStr, setSelectedDateStr] = useState(new Date().toLocaleDateString('es-ES')); 
   const [newExamSub, setNewExamSub] = useState("");
 
-  const formatDate = (d) => `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-  
+  const formatDate = (date) => {
+    const d = date.getDate().toString().padStart(2, '0');
+    const m = (date.getMonth() + 1).toString().padStart(2, '0');
+    const y = date.getFullYear();
+    return `${d}/${m}/${y}`;
+  };
+
+  useEffect(() => { setSelectedDateStr(formatDate(new Date())); }, []);
+
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  const adjustedFirstDay = firstDay === 0 ? 6 : firstDay - 1;
 
-  const handleDayClick = (d) => {
-     const newD = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
-     setSelectedDateStr(formatDate(newD));
+  const handleDayClick = (day) => {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    setSelectedDateStr(formatDate(date));
   };
 
   const addExam = async () => {
-    if(!newExamSub) return alert("Elige asignatura");
-    await addDoc(collection(db, 'users', userId, 'exams'), { subject: newExamSub, date: selectedDateStr });
+    if (!newExamSub) return alert("Elige una asignatura");
+    await addDoc(collection(db, 'users', userId, 'exams'), {
+      subject: newExamSub,
+      date: selectedDateStr,
+      createdAt: new Date()
+    });
     setNewExamSub("");
   };
 
   const deleteExam = async (id) => {
-    if(confirm("¿Borrar?")) await deleteDoc(doc(db, 'users', userId, 'exams', id));
+    if (confirm("¿Borrar examen?")) {
+      await deleteDoc(doc(db, 'users', userId, 'exams', id));
+    }
   };
 
   const days = [];
-  for(let i=0; i<offset; i++) days.push(<div key={`e-${i}`} className="bg-slate-50/50 border-r border-b"></div>);
-  for(let d=1; d<=daysInMonth; d++) {
-    const dStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), d));
-    const dayExams = exams.filter(e => e.date === dStr);
-    const isSelected = selectedDateStr === dStr;
-    const isToday = new Date().getDate() === d && new Date().getMonth() === currentDate.getMonth();
+  for (let i = 0; i < adjustedFirstDay; i++) days.push(<div key={`empty-${i}`} className="bg-white border-r border-b border-slate-100 min-h-[120px]"></div>);
+  
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), d));
+    const dayExams = exams.filter(e => e.date === dateStr);
+    const isToday = new Date().getDate() === d && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
+    const isSelected = selectedDateStr === dateStr;
 
     days.push(
-      <div key={d} onClick={()=>handleDayClick(d)} className={`min-h-[120px] border-r border-b p-2 cursor-pointer hover:bg-blue-50 transition-all relative group flex flex-col ${isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/50' : ''}`}>
-        <div className="flex justify-between">
-           <span className={`text-3xl font-bold leading-none ${isToday ? 'text-blue-600' : 'text-slate-700 opacity-50 group-hover:opacity-80'}`}>{d}</span>
+      <div 
+        key={d} 
+        onClick={() => handleDayClick(d)}
+        className={`
+          min-h-[120px] border-r border-b border-slate-100 p-2 cursor-pointer transition-all relative group flex flex-col
+          ${isToday ? 'bg-blue-50/40' : 'bg-white hover:bg-slate-50'} 
+          ${isSelected ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}
+        `}
+      >
+        <div className="flex justify-between items-start mb-1">
+          <span className={`text-3xl font-bold leading-none ${isToday ? 'text-blue-600' : 'text-slate-700 opacity-50 group-hover:opacity-80'}`}>{d}</span>
         </div>
+        
         <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar mt-1">
           {dayExams.map(e => (
             <div key={e.id} className="text-[11px] bg-red-100 text-red-900 px-2 py-1 rounded border-l-4 border-l-red-500 border-y border-r border-red-100 font-bold shadow-sm flex justify-between items-center group/exam transition-all hover:shadow-md hover:bg-red-200 truncate">
               <span className="truncate w-full">{e.subject}</span>
-              <button onClick={(ev)=>{ev.stopPropagation(); deleteExam(e.id)}} className="opacity-0 group-hover/exam:opacity-100 hover:text-red-700 p-0.5"><Trash2 size={14}/></button>
+              <button onClick={(ev) => { ev.stopPropagation(); deleteExam(e.id); }} className="opacity-0 group-hover/exam:opacity-100 hover:text-red-700 rounded p-0.5 transition-all"><Trash2 size={14} /></button>
             </div>
           ))}
         </div>
@@ -537,38 +562,43 @@ const CalendarView = ({ subjects, exams, userId }) => {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 h-full pt-2 pb-4">
-      <div className="flex-1 bg-white rounded-xl shadow border flex flex-col overflow-hidden">
-        <div className="p-4 flex justify-between items-center border-b">
-          <h2 className="font-bold text-xl capitalize">{currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</h2>
-          <div className="flex gap-2">
-            <button onClick={()=>setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1))} className="p-2 hover:bg-slate-100 rounded"><ChevronLeft/></button>
-            <button onClick={()=>setCurrentDate(new Date())} className="px-3 text-sm font-bold hover:bg-slate-100 rounded border">HOY</button>
-            <button onClick={()=>setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1))} className="p-2 hover:bg-slate-100 rounded"><ChevronRight/></button>
+    <div className="flex flex-col lg:flex-row gap-6 h-full animate-in fade-in duration-300 pt-2 pb-4">
+      <div className="flex-1 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col overflow-hidden h-full">
+        <div className="p-4 flex justify-between items-center border-b bg-white z-20 relative">
+          <div className="flex items-center gap-4">
+            <h2 className="font-bold text-2xl text-slate-800 capitalize">{currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}</h2>
+            <div className="flex gap-1">
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()-1, 1))} className="p-2 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"><ChevronLeft size={20}/></button>
+              <button onClick={() => setCurrentDate(new Date())} className="px-4 py-1 text-sm font-bold hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-600 transition-colors">HOY</button>
+              <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth()+1, 1))} className="p-2 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"><ChevronRight size={20}/></button>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-7 text-center text-xs font-bold py-2 border-b bg-slate-50"><div>LUN</div><div>MAR</div><div>MIÉ</div><div>JUE</div><div>VIE</div><div>SÁB</div><div>DOM</div></div>
-        <div className="grid grid-cols-7 flex-1 auto-rows-fr overflow-y-auto">{days}</div>
+        <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-3 border-b bg-slate-50 shadow-sm z-10"><div>LUN</div><div>MAR</div><div>MIÉ</div><div>JUE</div><div>VIE</div><div>SÁB</div><div>DOM</div></div>
+        {/* Updated Grid with explicit auto-rows-min and background */}
+        <div className="grid grid-cols-7 auto-rows-min flex-1 overflow-y-auto bg-white">
+          {days}
+        </div>
       </div>
-      <div className="lg:w-80 space-y-4 h-full flex flex-col">
-        <Card>
-          <h3 className="font-bold mb-4 flex items-center gap-2"><Plus size={18} className="text-blue-600"/> Nuevo Examen</h3>
+      <div className="lg:w-80 space-y-4 flex-shrink-0 h-full flex flex-col">
+        <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 shadow-md">
+          <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2"><Plus size={18} className="text-blue-600"/> Nuevo Examen</h3>
           <div className="space-y-3">
-            <select value={newExamSub} onChange={e=>setNewExamSub(e.target.value)} className="w-full p-2 border rounded mb-4">
-              <option value="">Asignatura...</option>
-              {subjects.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+            <select value={newExamSub} onChange={e => setNewExamSub(e.target.value)} className="w-full p-3 text-sm border border-blue-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-200 outline-none transition-all">
+              <option value="">Seleccionar...</option>
+              {subjects.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
-            <div className="w-full p-2 text-sm font-mono text-center bg-slate-100 rounded border">{selectedDateStr}</div>
-            <Button onClick={add} className="w-full">Guardar</Button>
+            <div className="w-full p-3 text-sm font-mono font-bold text-blue-800 bg-white border border-blue-200 rounded-lg text-center shadow-inner">{selectedDateStr}</div>
+            <Button onClick={addExam} className="w-full shadow-lg shadow-blue-200">Guardar Examen</Button>
           </div>
         </Card>
-        <Card className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-          <h3 className="font-bold mb-2 text-sm uppercase text-slate-400 border-b pb-2">Próximos</h3>
-          <div className="space-y-2 flex-1 overflow-y-auto">
+        <Card className="flex-1 overflow-y-auto min-h-0 shadow-md flex flex-col">
+          <h3 className="font-bold mb-3 text-sm uppercase text-slate-400 border-b pb-2">Lista de Eventos</h3>
+          <div className="space-y-2 flex-1 overflow-y-auto pr-1 custom-scrollbar">
             {exams.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-'))).map(e => (
-              <div key={e.id} className="flex justify-between items-center p-2 bg-white border rounded hover:shadow-sm">
-                <div><div className="font-bold text-sm">{e.subject}</div><div className="text-xs text-slate-500">{e.date}</div></div>
-                <button onClick={()=>deleteExam(e.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+              <div key={e.id} className="flex justify-between items-center p-3 bg-white rounded-lg border hover:border-red-300 hover:shadow-md group transition-all">
+                <div><div className="font-bold text-sm text-slate-700">{e.subject}</div><div className="text-xs text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-1 border border-slate-200">{e.date}</div></div>
+                <button onClick={() => deleteExam(e.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-all"><Trash2 size={16} /></button>
               </div>
             ))}
           </div>
@@ -586,7 +616,6 @@ const TimerView = ({ subjects, exams, userId }) => {
   const [isPaused, setIsPaused] = useState(false);
   const intervalRef = useRef(null);
 
-  // Lógica de recomendación en vivo
   const bestSubject = useMemo(() => {
     if (!subjects.length) return null;
     let best = null, maxScore = -1;
@@ -599,7 +628,9 @@ const TimerView = ({ subjects, exams, userId }) => {
 
   useEffect(() => {
     if (isActive && !isPaused) {
-      intervalRef.current = setInterval(() => setElapsed(t => t + 1), 1000);
+      intervalRef.current = setInterval(() => {
+        setElapsed(prev => prev + 1);
+      }, 1000);
     } else {
       clearInterval(intervalRef.current);
     }
@@ -681,16 +712,10 @@ const TimerView = ({ subjects, exams, userId }) => {
           </div>
           
           <div className="flex justify-center gap-4">
-            <button 
-              onClick={handlePause} 
-              className="w-20 h-20 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all shadow-lg"
-            >
+            <button onClick={handlePause} className="w-20 h-20 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all shadow-lg">
               {isPaused ? <Play size={32} fill="currentColor"/> : <Pause size={32} fill="currentColor"/>}
             </button>
-            <button 
-              onClick={handleStop} 
-              className="w-20 h-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition-all shadow-lg"
-            >
+            <button onClick={handleStop} className="w-20 h-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition-all shadow-lg">
               <Square size={32} fill="currentColor"/>
             </button>
           </div>
@@ -833,3 +858,4 @@ const ConfigView = ({ subjects, exams, userId }) => {
     </div>
   );
 };
+

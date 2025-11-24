@@ -4,7 +4,9 @@ import {
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged,
-  signInWithCustomToken
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -37,7 +39,7 @@ import {
   Maximize2
 } from 'lucide-react';
 
-// --- TU CONFIGURACIÓN DE FIREBASE (SE MANTIENE) ---
+// --- TU CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyAscXU-OzIudkHNMSS701XmHtVMsehutSI",
   authDomain: "studymaster-20233.firebaseapp.com",
@@ -52,6 +54,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 // --- COLORES & ESTILOS ---
 const COLORS = {
@@ -115,7 +118,7 @@ export default function StudyMasterWeb() {
         setSubjects([]); setExams([]); setHistory([]); setTodos([]);
         return;
     }
-    // Persistencia: Estos listeners mantienen los datos sincronizados con la nube
+    // Persistencia en la nube vinculada al UID
     const unsubSub = onSnapshot(collection(db, 'users', user.uid, 'subjects'), s => setSubjects(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubExams = onSnapshot(collection(db, 'users', user.uid, 'exams'), s => setExams(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubHist = onSnapshot(collection(db, 'users', user.uid, 'history'), s => setHistory(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -124,14 +127,42 @@ export default function StudyMasterWeb() {
     return () => { unsubSub(); unsubExams(); unsubHist(); unsubTodos(); };
   }, [user]);
 
-  // Auth Anónimo por defecto
-  useEffect(() => {
-    if (!loadingAuth && !user) {
-       signInAnonymously(auth).catch(console.error);
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error(error);
+      alert("Error al iniciar sesión: " + error.message);
     }
-  }, [loadingAuth, user]);
+  };
+
+  const handleLogout = () => signOut(auth);
 
   if (loadingAuth) return <div className="flex h-screen items-center justify-center text-slate-500">Cargando...</div>;
+
+  // --- PANTALLA DE LOGIN ---
+  if (!user) return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center animate-in fade-in zoom-in duration-300">
+        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <LogIn size={32} />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">StudyMaster</h1>
+        <p className="text-slate-500 mb-8">Sincroniza tu estudio en todos tus dispositivos.</p>
+        
+        <Button onClick={handleLogin} variant="google" className="w-full flex items-center justify-center gap-3 py-3 text-lg shadow-sm">
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="Google" />
+          Continuar con Google
+        </Button>
+        
+        <div className="mt-6 pt-6 border-t border-slate-100">
+            <button onClick={() => signInAnonymously(auth)} className="text-sm text-slate-400 hover:text-slate-600 underline">
+                Continuar como invitado (sin sincronización)
+            </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // --- APP RENDER ---
   return (
@@ -141,11 +172,15 @@ export default function StudyMasterWeb() {
         <div className="p-6 hidden md:block">
           <h1 className="text-2xl font-bold text-white tracking-wider">StudyMaster</h1>
           <div className="flex items-center gap-2 mt-3 p-2 bg-slate-800 rounded-lg">
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm text-white font-bold shadow-md">
-              {user?.isAnonymous ? 'A' : 'G'}
-            </div>
+            {user.photoURL ? (
+                <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-full shadow-md" />
+            ) : (
+                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm text-white font-bold shadow-md">
+                {user.isAnonymous ? 'A' : user.displayName?.[0] || 'U'}
+                </div>
+            )}
             <div className="overflow-hidden">
-              <p className="text-xs text-slate-300 font-medium truncate">{user?.isAnonymous ? 'Modo Invitado' : user?.displayName}</p>
+              <p className="text-xs text-slate-300 font-medium truncate max-w-[120px]">{user.isAnonymous ? 'Invitado' : user.displayName}</p>
               <p className="text-[10px] text-slate-500">En línea</p>
             </div>
           </div>
@@ -159,10 +194,21 @@ export default function StudyMasterWeb() {
           <NavBtn id="stats" icon={BarChart3} label="Estadísticas" active={activeTab} set={setActiveTab} />
           <NavBtn id="config" icon={Settings} label="Configuración" active={activeTab} set={setActiveTab} />
         </div>
+
+        <div className="hidden md:block p-4">
+            <button onClick={handleLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded hover:bg-slate-800">
+                <LogOut size={16} /> Cerrar Sesión
+            </button>
+        </div>
       </nav>
 
       {/* Contenido */}
       <main className="flex-1 p-4 md:p-6 overflow-y-auto h-full order-1 md:order-2 relative scroll-smooth">
+        {/* Botón Logout Móvil */}
+        <div className="md:hidden absolute top-4 right-4 z-30">
+             <button onClick={handleLogout} className="p-2 bg-white rounded-full shadow text-slate-600"><LogOut size={20}/></button>
+        </div>
+
         {activeTab === 'dashboard' && <DashboardView subjects={subjects} exams={exams} />}
         {activeTab === 'todo' && <TodoView subjects={subjects} exams={exams} todos={todos} userId={user?.uid} />}
         {activeTab === 'calendar' && <CalendarView subjects={subjects} exams={exams} userId={user?.uid} />}

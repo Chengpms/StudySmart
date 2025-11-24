@@ -37,10 +37,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Pause,
+  RotateCcw,
   Flame,
   Trophy,
   TrendingUp,
-  Clock
+  Clock,
+  CalendarDays
 } from 'lucide-react';
 
 // --- TU CONFIGURACIÓN DE FIREBASE ---
@@ -60,7 +62,37 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// --- COLORES & ESTILOS ---
+// --- SISTEMA DE COLORES POR ASIGNATURA ---
+const SUBJECT_COLORS = [
+  { name: 'red', bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200', fill: '#EF4444', ring: 'ring-red-500', bar: 'bg-red-500' },
+  { name: 'orange', bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-200', fill: '#F97316', ring: 'ring-orange-500', bar: 'bg-orange-500' },
+  { name: 'amber', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-200', fill: '#F59E0B', ring: 'ring-amber-500', bar: 'bg-amber-500' },
+  { name: 'yellow', bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200', fill: '#EAB308', ring: 'ring-yellow-500', bar: 'bg-yellow-500' },
+  { name: 'lime', bg: 'bg-lime-100', text: 'text-lime-800', border: 'border-lime-200', fill: '#84CC16', ring: 'ring-lime-500', bar: 'bg-lime-500' },
+  { name: 'green', bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', fill: '#22C55E', ring: 'ring-green-500', bar: 'bg-green-500' },
+  { name: 'emerald', bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200', fill: '#10B981', ring: 'ring-emerald-500', bar: 'bg-emerald-500' },
+  { name: 'teal', bg: 'bg-teal-100', text: 'text-teal-800', border: 'border-teal-200', fill: '#14B8A6', ring: 'ring-teal-500', bar: 'bg-teal-500' },
+  { name: 'cyan', bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-200', fill: '#06B6D4', ring: 'ring-cyan-500', bar: 'bg-cyan-500' },
+  { name: 'sky', bg: 'bg-sky-100', text: 'text-sky-800', border: 'border-sky-200', fill: '#0EA5E9', ring: 'ring-sky-500', bar: 'bg-sky-500' },
+  { name: 'blue', bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', fill: '#3B82F6', ring: 'ring-blue-500', bar: 'bg-blue-500' },
+  { name: 'indigo', bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', fill: '#6366F1', ring: 'ring-indigo-500', bar: 'bg-indigo-500' },
+  { name: 'violet', bg: 'bg-violet-100', text: 'text-violet-800', border: 'border-violet-200', fill: '#8B5CF6', ring: 'ring-violet-500', bar: 'bg-violet-500' },
+  { name: 'purple', bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', fill: '#A855F7', ring: 'ring-purple-500', bar: 'bg-purple-500' },
+  { name: 'fuchsia', bg: 'bg-fuchsia-100', text: 'text-fuchsia-800', border: 'border-fuchsia-200', fill: '#D946EF', ring: 'ring-fuchsia-500', bar: 'bg-fuchsia-500' },
+  { name: 'pink', bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-200', fill: '#EC4899', ring: 'ring-pink-500', bar: 'bg-pink-500' },
+  { name: 'rose', bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-200', fill: '#F43F5E', ring: 'ring-rose-500', bar: 'bg-rose-500' }
+];
+
+const getSubjectColor = (name) => {
+  if (!name) return SUBJECT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return SUBJECT_COLORS[Math.abs(hash % SUBJECT_COLORS.length)];
+};
+
+// --- ESTILOS GENERALES ---
 const COLORS = {
   bg: "bg-slate-50",
   panel: "bg-white",
@@ -104,17 +136,15 @@ const calculatePriority = (subject, exams) => {
   let score = (subject.difficulty || 2) * 10;
   let minDays = 999;
 
-  // Buscar examen más cercano
   exams.filter(e => e.subject === subject.name).forEach(e => {
       const parts = e.date.split('/');
       if (parts.length === 3) {
-          const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // YYYY-MM-DD
+          const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
           const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
           if (diff >= 0) minDays = Math.min(minDays, diff);
       }
   });
 
-  // Multiplicadores de Urgencia
   let reason = "Mantenimiento";
   if (minDays <= 1) { score *= 100; reason = "¡Examen Inminente!"; }
   else if (minDays <= 3) { score *= 50; reason = `Examen en ${minDays} días`; }
@@ -122,7 +152,6 @@ const calculatePriority = (subject, exams) => {
   else if (minDays <= 14) { score *= 5; reason = "Examen en 2 semanas"; }
   else if (minDays <= 30) { score *= 2; reason = "Examen a la vista"; }
   else {
-     // Si no hay examen, la dificultad pesa más
      score *= 1;
      reason = subject.difficulty >= 3 ? "Asignatura Difícil" : "Repaso General";
   }
@@ -130,20 +159,17 @@ const calculatePriority = (subject, exams) => {
   return { score, minDays, reason };
 };
 
-
 // --- APP PRINCIPAL ---
 export default function StudyMasterWeb() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Datos
   const [subjects, setSubjects] = useState([]);
   const [exams, setExams] = useState([]);
   const [history, setHistory] = useState([]);
   const [todos, setTodos] = useState([]);
 
-  // Auth Listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -152,7 +178,6 @@ export default function StudyMasterWeb() {
     return unsub;
   }, []);
 
-  // Carga de Datos
   useEffect(() => {
     if (!user) {
         setSubjects([]); setExams([]); setHistory([]); setTodos([]);
@@ -166,20 +191,19 @@ export default function StudyMasterWeb() {
     return () => { unsubSub(); unsubExams(); unsubHist(); unsubTodos(); };
   }, [user]);
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      console.error(error);
-      alert("Error al iniciar sesión: " + error.message);
+  useEffect(() => {
+    if (!loadingAuth && !user) {
+       signInAnonymously(auth).catch(console.error);
     }
-  };
+  }, [loadingAuth, user]);
 
-  const handleLogout = () => signOut(auth);
+  const handleLogin = async () => {
+    try { await signInWithPopup(auth, googleProvider); } 
+    catch (e) { alert(e.message); }
+  };
 
   if (loadingAuth) return <div className="flex h-screen items-center justify-center text-slate-500">Cargando...</div>;
 
-  // --- PANTALLA DE LOGIN ---
   if (!user) return (
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center animate-in fade-in zoom-in duration-300">
@@ -188,25 +212,19 @@ export default function StudyMasterWeb() {
         </div>
         <h1 className="text-3xl font-bold text-slate-800 mb-2">StudyMaster</h1>
         <p className="text-slate-500 mb-8">Sincroniza tu estudio en todos tus dispositivos.</p>
-        
         <Button onClick={handleLogin} variant="google" className="w-full flex items-center justify-center gap-3 py-3 text-lg shadow-sm">
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6" alt="Google" />
           Continuar con Google
         </Button>
-        
         <div className="mt-6 pt-6 border-t border-slate-100">
-            <button onClick={() => signInAnonymously(auth)} className="text-sm text-slate-400 hover:text-slate-600 underline">
-                Continuar como invitado (sin sincronización)
-            </button>
+            <button onClick={() => signInAnonymously(auth)} className="text-sm text-slate-400 hover:text-slate-600 underline">Continuar como invitado</button>
         </div>
       </div>
     </div>
   );
 
-  // --- APP RENDER ---
   return (
     <div className={`h-screen ${COLORS.bg} flex flex-col md:flex-row font-sans text-slate-800 overflow-hidden`}>
-      {/* Navegación */}
       <nav className="md:w-64 bg-slate-900 text-slate-300 flex md:flex-col justify-between md:h-screen z-50 order-2 md:order-1 shrink-0 shadow-xl">
         <div className="p-6 hidden md:block">
           <h1 className="text-2xl font-bold text-white tracking-wider">StudyMaster</h1>
@@ -220,7 +238,6 @@ export default function StudyMasterWeb() {
             )}
             <div className="overflow-hidden">
               <p className="text-xs text-slate-300 font-medium truncate max-w-[120px]">{user.isAnonymous ? 'Invitado' : user.displayName}</p>
-              <p className="text-[10px] text-slate-500">En línea</p>
             </div>
           </div>
         </div>
@@ -235,17 +252,15 @@ export default function StudyMasterWeb() {
         </div>
 
         <div className="hidden md:block p-4">
-            <button onClick={handleLogout} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded hover:bg-slate-800">
+            <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm w-full p-2 rounded hover:bg-slate-800">
                 <LogOut size={16} /> Cerrar Sesión
             </button>
         </div>
       </nav>
 
-      {/* Contenido */}
       <main className="flex-1 p-4 md:p-6 overflow-y-auto h-full order-1 md:order-2 relative scroll-smooth">
-        {/* Botón Logout Móvil */}
         <div className="md:hidden absolute top-4 right-4 z-30">
-             <button onClick={handleLogout} className="p-2 bg-white rounded-full shadow text-slate-600"><LogOut size={20}/></button>
+             <button onClick={() => signOut(auth)} className="p-2 bg-white rounded-full shadow text-slate-600"><LogOut size={20}/></button>
         </div>
 
         {activeTab === 'dashboard' && <DashboardView subjects={subjects} exams={exams} />}
@@ -287,32 +302,28 @@ const DashboardView = ({ subjects, exams }) => {
     return { label: "⚠️ No al día", color: "text-amber-600 bg-amber-50 border-amber-200", days };
   };
 
-  // SUGERENCIA COACH ARREGLADA
   const suggest = () => {
     if(!subjects.length) return alert("Añade asignaturas primero.");
     let best = null, maxScore = -1;
-
     subjects.forEach(s => {
-      const { score } = calculatePriority(s, exams);
-      if(score > maxScore) { maxScore = score; best = s; }
+      const { score, reason } = calculatePriority(s, exams);
+      if(score > maxScore) { maxScore = score; best = { ...s, reason }; }
     });
-
-    if(best) {
-        const { reason } = calculatePriority(best, exams);
-        alert(`🤖 EL COACH SUGIERE:\n\n👉 ${best.name.toUpperCase()}\n\nMotivo: ${reason}\n\nEs tu prioridad actual por dificultad y urgencia.`);
-    }
+    if(best) alert(`🤖 EL COACH SUGIERE:\n\n👉 ${best.name.toUpperCase()}\n\nMotivo: ${best.reason}`);
   };
 
   return (
     <div className="space-y-6 animate-in fade-in pt-4">
-      <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-        <LayoutDashboard className="text-blue-600"/> Dashboard Global
-      </h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> Dashboard</h2>
+        <Button variant="purple" onClick={suggest} className="flex gap-2 items-center text-sm"><Lightbulb size={16}/> Coach</Button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {subjects.map(s => {
           const st = getStatus(s.name);
+          const color = getSubjectColor(s.name);
           return (
-            <Card key={s.id} className="hover:shadow-lg border-l-4 border-l-blue-500">
+            <Card key={s.id} className={`hover:shadow-lg border-l-4 ${color.border}`} style={{ borderLeftColor: color.fill }}>
               <div className="flex justify-between mb-3 items-start">
                 <h3 className="font-bold text-lg text-slate-800">{s.name}</h3>
                 <span className={`px-2 py-1 rounded text-xs font-bold border ${st.color}`}>{st.label}</span>
@@ -321,12 +332,11 @@ const DashboardView = ({ subjects, exams }) => {
                 <div className="flex justify-between bg-slate-50 p-2 rounded">
                   <span>Dificultad:</span> 
                   <span className="font-bold flex gap-1">
-                    {[...Array(s.difficulty)].map((_,i)=><span key={i} className="text-blue-500">★</span>)}
+                    {[...Array(s.difficulty)].map((_,i)=><span key={i} className="text-yellow-400">★</span>)}
                   </span>
                 </div>
                 <div className="flex justify-between bg-slate-50 p-2 rounded">
-                  <span>Días Restantes:</span> 
-                  <span className="font-bold">{st.days === 999 ? '-' : st.days}</span>
+                  <span>Días Restantes:</span> <span className="font-bold">{st.days === 999 ? '-' : st.days}</span>
                 </div>
               </div>
             </Card>
@@ -342,18 +352,13 @@ const DashboardView = ({ subjects, exams }) => {
 const TodoView = ({ subjects, exams, todos, userId }) => {
   const [hours, setHours] = useState(() => localStorage.getItem('sm_hours') || 2);
   const [sel, setSel] = useState(() => {
-    try {
-        const saved = localStorage.getItem('sm_sel');
-        return saved ? JSON.parse(saved) : {};
-    } catch { return {} }
+    try { return JSON.parse(localStorage.getItem('sm_sel') || '{}'); } catch { return {} }
   });
   
   useEffect(() => { localStorage.setItem('sm_hours', hours); }, [hours]);
   useEffect(() => { localStorage.setItem('sm_sel', JSON.stringify(sel)); }, [sel]);
 
-  const toggleSel = (name) => {
-    setSel(prev => ({ ...prev, [name]: !prev[name] }));
-  };
+  const toggleSel = (name) => setSel(prev => ({ ...prev, [name]: !prev[name] }));
 
   const gen = async () => {
     todos.forEach(t => deleteDoc(doc(db, 'users', userId, 'todos', t.id)));
@@ -372,12 +377,7 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     });
     
     const totalP = Object.values(scores).reduce((a,b)=>a+b, 0) || 1;
-    
-    // REPARTO Y PODA
-    let allocations = finalList.map(name => {
-        const rawMins = totalMins * (scores[name] / totalP);
-        return { name, rawMins, score: scores[name] };
-    });
+    let allocations = finalList.map(name => ({ name, rawMins: totalMins * (scores[name] / totalP), score: scores[name] }));
 
     if (allocations.length > 1) {
         const validAllocations = allocations.filter(a => a.rawMins >= 25);
@@ -391,8 +391,7 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     }
 
     for (const alloc of allocations) {
-      let mins = Math.floor(alloc.rawMins);
-      mins = Math.round(mins / 5) * 5;
+      let mins = Math.round(Math.floor(alloc.rawMins) / 5) * 5;
       if (mins < 15) continue;
 
       const s = subjects.find(sb => sb.name === alloc.name);
@@ -402,8 +401,7 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
       if (ratioT > 0.8) tasks.push({t:'Teoría', m: mins});
       else if (ratioT < 0.2) tasks.push({t:'Práctica', m: mins});
       else {
-        let tT = Math.floor(mins * ratioT);
-        tT = Math.round(tT / 5) * 5;
+        let tT = Math.round(Math.floor(mins * ratioT) / 5) * 5;
         let tP = mins - tT;
         if (tT < 15) { tP += tT; tT = 0; }
         if (tP < 15) { tT += tP; tP = 0; }
@@ -423,30 +421,17 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     <div className="grid md:grid-cols-3 gap-6 pt-4 h-full">
       <div className="md:col-span-1 space-y-4">
         <Card className="border-blue-100 shadow-md">
-          <h3 className="font-bold mb-4 text-slate-800 flex items-center gap-2">
-            <ListTodo size={20} className="text-blue-600"/> Configurar Sesión
-          </h3>
+          <h3 className="font-bold mb-4 text-slate-800 flex items-center gap-2"><ListTodo size={20} className="text-blue-600"/> Configurar Sesión</h3>
           <div className="mb-4">
             <label className="text-xs font-bold uppercase text-slate-400">Horas Hoy</label>
-            <input 
-              type="number" 
-              value={hours} 
-              onChange={e=>setHours(e.target.value)} 
-              className="w-full p-3 border border-slate-200 rounded-lg mt-1 text-lg font-medium focus:ring-2 focus:ring-blue-200 outline-none transition-all" 
-              step="0.5" 
-            />
+            <input type="number" value={hours} onChange={e=>setHours(e.target.value)} className="w-full p-3 border border-slate-200 rounded-lg mt-1 text-lg font-medium outline-none focus:ring-2 focus:ring-blue-200" step="0.5" />
           </div>
           <div className="mb-4">
             <label className="text-xs font-bold uppercase text-slate-400 mb-2 block">Selección (Opcional)</label>
             <div className="max-h-60 overflow-y-auto border border-slate-200 p-2 rounded-lg bg-slate-50">
               {subjects.map(s => (
                 <label key={s.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors">
-                  <input 
-                    type="checkbox" 
-                    checked={!!sel[s.name]} 
-                    onChange={()=>toggleSel(s.name)} 
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" 
-                  />
+                  <input type="checkbox" checked={!!sel[s.name]} onChange={()=>toggleSel(s.name)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" />
                   <span className="text-sm font-medium text-slate-700">{s.name}</span>
                 </label>
               ))}
@@ -459,34 +444,34 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
 
       <div className="md:col-span-2 flex flex-col h-full overflow-hidden">
         <div className="mb-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200 shrink-0">
-          <div className="flex justify-between text-sm font-bold mb-2">
-            <span className="text-slate-600">Progreso Diario</span>
-            <span className="text-blue-600 text-lg">{progress}%</span>
-          </div>
-          <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" style={{width: `${progress}%`}}></div>
-          </div>
+          <div className="flex justify-between text-sm font-bold mb-2"><span className="text-slate-600">Progreso Diario</span><span className="text-blue-600 text-lg">{progress}%</span></div>
+          <div className="h-4 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]" style={{width: `${progress}%`}}></div></div>
         </div>
         <div className="flex-1 overflow-y-auto space-y-3 bg-white p-4 rounded-xl shadow-inner border border-slate-200 custom-scrollbar">
           {!todos.length && <div className="text-center text-slate-400 mt-10">Lista vacía</div>}
-          {todos.map(t => (
-            <div key={t.id} onClick={()=>updateDoc(doc(db, 'users', userId, 'todos', t.id), {done: !t.done})} className={`p-4 rounded-xl border cursor-pointer flex items-center gap-4 transition-all duration-200 ${t.done ? 'bg-slate-50 border-slate-100 opacity-75' : 'bg-white hover:shadow-md'}`}>
+          {todos.map(t => {
+            const color = getSubjectColor(t.subject);
+            return (
+            <div key={t.id} onClick={()=>updateDoc(doc(db, 'users', userId, 'todos', t.id), {done: !t.done})} className={`p-4 rounded-xl border cursor-pointer flex items-center gap-4 transition-all duration-200 ${t.done ? 'bg-slate-50 border-slate-100 opacity-75' : 'bg-white hover:shadow-md'}`} style={{ borderLeftColor: color.fill, borderLeftWidth: '4px' }}>
               <div className={`w-6 h-6 rounded border flex items-center justify-center ${t.done ? 'bg-green-500 border-green-500' : ''}`}>
                 {t.done && <CheckSquare size={16} className="text-white"/>}
               </div>
               <div>
                 <div className={`font-bold ${t.done && 'line-through'}`}>{t.subject}</div>
-                <div className="text-xs text-slate-500">{t.type} - {t.mins} min</div>
+                <div className="text-xs text-slate-500 flex gap-2 items-center">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${color.bg} ${color.text}`}>{t.type}</span>
+                    <span>{t.mins} min</span>
+                </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </div>
     </div>
   );
 };
 
-// 3. CALENDARIO (FIXED GRID & WHITE BACKGROUND)
+// 3. CALENDARIO (COLORFUL)
 const CalendarView = ({ subjects, exams, userId }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDateStr, setSelectedDateStr] = useState(new Date().toLocaleDateString('es-ES')); 
@@ -532,30 +517,23 @@ const CalendarView = ({ subjects, exams, userId }) => {
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), d));
     const dayExams = exams.filter(e => e.date === dateStr);
-    const isToday = new Date().getDate() === d && new Date().getMonth() === currentDate.getMonth() && new Date().getFullYear() === currentDate.getFullYear();
+    const isToday = new Date().getDate() === d && new Date().getMonth() === currentDate.getMonth();
     const isSelected = selectedDateStr === dateStr;
 
     days.push(
-      <div 
-        key={d} 
-        onClick={() => handleDayClick(d)}
-        className={`
-          min-h-[120px] border-r border-b border-slate-100 p-2 cursor-pointer transition-all relative group flex flex-col
-          ${isToday ? 'bg-blue-50/40' : 'bg-white hover:bg-slate-50'} 
-          ${isSelected ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}
-        `}
-      >
+      <div key={d} onClick={() => handleDayClick(d)} className={`min-h-[120px] border-r border-b border-slate-100 p-2 cursor-pointer transition-all relative group flex flex-col ${isToday ? 'bg-blue-50/40' : 'bg-white hover:bg-slate-50'} ${isSelected ? 'ring-2 ring-inset ring-blue-500 z-10' : ''}`}>
         <div className="flex justify-between items-start mb-1">
           <span className={`text-3xl font-bold leading-none ${isToday ? 'text-blue-600' : 'text-slate-700 opacity-50 group-hover:opacity-80'}`}>{d}</span>
         </div>
-        
         <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar mt-1">
-          {dayExams.map(e => (
-            <div key={e.id} className="text-[11px] bg-red-100 text-red-900 px-2 py-1 rounded border-l-4 border-l-red-500 border-y border-r border-red-100 font-bold shadow-sm flex justify-between items-center group/exam transition-all hover:shadow-md hover:bg-red-200 truncate">
+          {dayExams.map(e => {
+            const color = getSubjectColor(e.subject);
+            return (
+            <div key={e.id} className={`text-[11px] ${color.bg} ${color.text} px-2 py-1 rounded border-l-4 ${color.border} font-bold shadow-sm flex justify-between items-center group/exam transition-all hover:shadow-md truncate`} style={{ borderLeftColor: color.fill }}>
               <span className="truncate w-full">{e.subject}</span>
               <button onClick={(ev) => { ev.stopPropagation(); deleteExam(e.id); }} className="opacity-0 group-hover/exam:opacity-100 hover:text-red-700 rounded p-0.5 transition-all"><Trash2 size={14} /></button>
             </div>
-          ))}
+          )})}
         </div>
       </div>
     );
@@ -575,10 +553,7 @@ const CalendarView = ({ subjects, exams, userId }) => {
           </div>
         </div>
         <div className="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-3 border-b bg-slate-50 shadow-sm z-10"><div>LUN</div><div>MAR</div><div>MIÉ</div><div>JUE</div><div>VIE</div><div>SÁB</div><div>DOM</div></div>
-        {/* Updated Grid with explicit auto-rows-min and background */}
-        <div className="grid grid-cols-7 auto-rows-min flex-1 overflow-y-auto bg-white">
-          {days}
-        </div>
+        <div className="grid grid-cols-7 auto-rows-min flex-1 overflow-y-auto bg-white">{days}</div>
       </div>
       <div className="lg:w-80 space-y-4 flex-shrink-0 h-full flex flex-col">
         <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 shadow-md">
@@ -595,12 +570,15 @@ const CalendarView = ({ subjects, exams, userId }) => {
         <Card className="flex-1 overflow-y-auto min-h-0 shadow-md flex flex-col">
           <h3 className="font-bold mb-3 text-sm uppercase text-slate-400 border-b pb-2">Lista de Eventos</h3>
           <div className="space-y-2 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {exams.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-'))).map(e => (
-              <div key={e.id} className="flex justify-between items-center p-3 bg-white rounded-lg border hover:border-red-300 hover:shadow-md group transition-all">
-                <div><div className="font-bold text-sm text-slate-700">{e.subject}</div><div className="text-xs text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-1 border border-slate-200">{e.date}</div></div>
-                <button onClick={() => deleteExam(e.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-full transition-all"><Trash2 size={16} /></button>
+            {exams.sort((a,b) => new Date(a.date.split('/').reverse().join('-')) - new Date(b.date.split('/').reverse().join('-'))).map(e => {
+              const color = getSubjectColor(e.subject);
+              return (
+              <div key={e.id} className={`flex justify-between items-center p-3 bg-white rounded-lg border hover:shadow-md group transition-all ${color.bg}`} style={{ borderLeft: `4px solid ${color.fill}` }}>
+                <div><div className="font-bold text-sm text-slate-700">{e.subject}</div><div className="text-xs text-slate-400 font-mono bg-white/50 px-1.5 py-0.5 rounded inline-block mt-1">{e.date}</div></div>
+                <button onClick={() => deleteExam(e.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full transition-all"><Trash2 size={16} /></button>
               </div>
-            ))}
+            )})}
+            {!exams.length && <div className="text-center text-slate-400 text-sm py-4 italic">No hay exámenes a la vista</div>}
           </div>
         </Card>
       </div>
@@ -608,7 +586,7 @@ const CalendarView = ({ subjects, exams, userId }) => {
   );
 };
 
-// 4. SALA ESTUDIO (CRONÓMETRO + RECOMENDACIÓN)
+// 4. SALA ESTUDIO
 const TimerView = ({ subjects, exams, userId }) => {
   const [sel, setSel] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -628,9 +606,7 @@ const TimerView = ({ subjects, exams, userId }) => {
 
   useEffect(() => {
     if (isActive && !isPaused) {
-      intervalRef.current = setInterval(() => {
-        setElapsed(prev => prev + 1);
-      }, 1000);
+      intervalRef.current = setInterval(() => setElapsed(t => t + 1), 1000);
     } else {
       clearInterval(intervalRef.current);
     }
@@ -643,20 +619,12 @@ const TimerView = ({ subjects, exams, userId }) => {
     setIsPaused(false);
   };
 
-  const handlePause = () => setIsPaused(!isPaused);
-
   const handleStop = async () => {
-    setIsActive(false);
-    setIsPaused(false);
+    setIsActive(false); setIsPaused(false);
     const minutes = Math.floor(elapsed / 60);
-    
     if (minutes > 0) {
-      await addDoc(collection(db, 'users', userId, 'history'), {
-        subject: sel,
-        minutes: minutes,
-        date: new Date().toISOString()
-      });
-      alert(`¡Sesión guardada! ${minutes} minutos añadidos a ${sel}.`);
+      await addDoc(collection(db, 'users', userId, 'history'), { subject: sel, minutes: minutes, date: new Date().toISOString() });
+      alert(`¡Sesión guardada! ${minutes} minutos.`);
     }
     setElapsed(0);
   };
@@ -673,21 +641,17 @@ const TimerView = ({ subjects, exams, userId }) => {
       {!isActive ? (
         <Card className="w-full space-y-6 p-8 border-t-4 border-t-blue-500 shadow-xl">
           <h2 className="text-3xl font-bold text-slate-800">Cronómetro de Estudio</h2>
-          
           {bestSubject && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-left flex items-start gap-3">
               <Flame className="text-orange-500 shrink-0 mt-1" />
               <div>
                 <div className="font-bold text-amber-900 text-sm uppercase tracking-wide">Recomendación Prioritaria</div>
-                <div className="font-bold text-slate-800 text-lg">{bestSubject.name}</div>
+                <div className="font-bold text-slate-800 text-lg" style={{color: getSubjectColor(bestSubject.name).fill}}>{bestSubject.name}</div>
                 <p className="text-xs text-amber-700 mt-1">{bestSubject.reason}</p>
-                <button onClick={() => setSel(bestSubject.name)} className="text-xs text-blue-600 hover:underline mt-2 font-medium">
-                  Seleccionar esta asignatura
-                </button>
+                <button onClick={() => setSel(bestSubject.name)} className="text-xs text-blue-600 hover:underline mt-2 font-medium">Seleccionar esta asignatura</button>
               </div>
             </div>
           )}
-
           <div className="space-y-4 text-left">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Asignatura</label>
@@ -697,27 +661,20 @@ const TimerView = ({ subjects, exams, userId }) => {
               </select>
             </div>
           </div>
-          <Button onClick={handleStart} className="w-full py-4 text-lg shadow-lg shadow-blue-200 hover:shadow-blue-300 flex justify-center gap-2">
-            <Play size={24} fill="currentColor"/> INICIAR CRONÓMETRO
-          </Button>
+          <Button onClick={handleStart} className="w-full py-4 text-lg shadow-lg shadow-blue-200 hover:shadow-blue-300 flex justify-center gap-2"><Play size={24} fill="currentColor"/> INICIAR CRONÓMETRO</Button>
         </Card>
       ) : (
         <div className="w-full space-y-8">
           <div>
-            <div className="text-2xl font-bold text-blue-600 mb-4 animate-pulse bg-blue-50 inline-block px-4 py-1 rounded-full">{sel}</div>
-            <div className={`text-[5rem] md:text-[7rem] font-mono font-bold text-slate-800 leading-none tracking-tighter drop-shadow-sm ${isPaused ? 'opacity-50' : ''}`}>
-              {formatTime(elapsed)}
-            </div>
+            <div className={`text-2xl font-bold mb-4 animate-pulse bg-slate-50 inline-block px-4 py-1 rounded-full`} style={{ color: getSubjectColor(sel).fill }}>{sel}</div>
+            <div className={`text-[5rem] md:text-[7rem] font-mono font-bold text-slate-800 leading-none tracking-tighter drop-shadow-sm ${isPaused ? 'opacity-50' : ''}`}>{formatTime(elapsed)}</div>
             {isPaused && <div className="text-amber-500 font-bold uppercase tracking-widest mt-2">En Pausa</div>}
           </div>
-          
           <div className="flex justify-center gap-4">
-            <button onClick={handlePause} className="w-20 h-20 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all shadow-lg">
+            <button onClick={() => setIsPaused(!isPaused)} className="w-20 h-20 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center hover:bg-amber-200 transition-all shadow-lg">
               {isPaused ? <Play size={32} fill="currentColor"/> : <Pause size={32} fill="currentColor"/>}
             </button>
-            <button onClick={handleStop} className="w-20 h-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition-all shadow-lg">
-              <Square size={32} fill="currentColor"/>
-            </button>
+            <button onClick={handleStop} className="w-20 h-20 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition-all shadow-lg"><Square size={32} fill="currentColor"/></button>
           </div>
         </div>
       )}
@@ -773,7 +730,7 @@ const StatsView = ({ subjects, history }) => {
         </div>
         <div className="bg-white p-5 rounded-xl border flex items-center gap-4">
             <div className="p-3 bg-purple-50 text-purple-600 rounded"><Trophy size={24}/></div>
-            <div><div className="text-xs text-slate-500 font-bold">TOP ASIGNATURA</div><div className="text-xl font-bold truncate max-w-[120px]">{stats.top}</div></div>
+            <div><div className="text-xs text-slate-500 font-bold">TOP ASIGNATURA</div><div className="text-xl font-bold truncate max-w-[120px]" style={{color: getSubjectColor(stats.top).fill}}>{stats.top}</div></div>
         </div>
       </div>
 
@@ -793,12 +750,14 @@ const StatsView = ({ subjects, history }) => {
       <Card>
         <h3 className="font-bold mb-4">Desglose</h3>
         <div className="space-y-4">
-            {stats.bd.map(i=>(
+            {stats.bd.map(i=>{
+                const c = getSubjectColor(i.n);
+                return (
                 <div key={i.n}>
                     <div className="flex justify-between text-sm mb-1 font-bold text-slate-700"><span>{i.n}</span><span className="text-slate-400 text-xs font-normal">{i.m}m ({i.s} ses)</span></div>
-                    <div className="h-2 bg-slate-100 rounded overflow-hidden"><div className="h-full bg-indigo-500" style={{width:`${i.p}%`}}></div></div>
+                    <div className="h-2 bg-slate-100 rounded overflow-hidden"><div className="h-full" style={{width:`${i.p}%`, backgroundColor: c.fill}}></div></div>
                 </div>
-            ))}
+            )})}
         </div>
       </Card>
     </div>
@@ -844,18 +803,19 @@ const ConfigView = ({ subjects, exams, userId }) => {
       </Card>
       <Card>
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
-          {subjects.map(s => (
-            <div key={s.id} className="flex justify-between p-3 border rounded items-center">
-              <div><div className="font-bold">{s.name}</div><div className="text-xs text-slate-500">Dif: {s.difficulty}</div></div>
+          {subjects.map(s => {
+            const c = getSubjectColor(s.name);
+            return (
+            <div key={s.id} className={`flex justify-between p-3 border rounded items-center ${c.bg} ${c.border}`}>
+              <div><div className={`font-bold ${c.text}`}>{s.name}</div><div className="text-xs text-slate-500">Dif: {s.difficulty}</div></div>
               <div className="flex gap-2">
                 <button onClick={()=>{setName(s.name); setDiff(s.difficulty); setRatio((s.ratio||0.5)*100)}} className="text-blue-500"><Settings size={16}/></button>
                 <button onClick={()=>del(s.id, s.name)} className="text-red-500"><Trash2 size={16}/></button>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </Card>
     </div>
   );
 };
-

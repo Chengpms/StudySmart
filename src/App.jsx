@@ -85,18 +85,14 @@ const SUBJECT_COLORS = [
 ];
 
 // Función inteligente para obtener estilo
-// 1. Si la asignatura tiene un color guardado, usa ese.
-// 2. Si no, genera uno basado en el hash del nombre.
 const getSubjectStyle = (subjectOrName) => {
   if (!subjectOrName) return SUBJECT_COLORS[0];
   
-  // Si es un objeto y tiene color definido
   if (typeof subjectOrName === 'object' && subjectOrName.color) {
     const found = SUBJECT_COLORS.find(c => c.name === subjectOrName.color);
     if (found) return found;
   }
   
-  // Fallback: Hash del nombre
   const name = typeof subjectOrName === 'object' ? subjectOrName.name : subjectOrName;
   if (!name) return SUBJECT_COLORS[0];
 
@@ -206,11 +202,8 @@ export default function StudyMasterWeb() {
     return () => { unsubSub(); unsubExams(); unsubHist(); unsubTodos(); };
   }, [user]);
 
-  useEffect(() => {
-    if (!loadingAuth && !user) {
-       signInAnonymously(auth).catch(console.error);
-    }
-  }, [loadingAuth, user]);
+  // --- ELIMINADO EL useEffect DE INICIO DE SESIÓN AUTOMÁTICO ---
+  // Ahora la app se quedará en la pantalla de "Login" hasta que tú pulses un botón.
 
   const handleLogin = async () => {
     try { await signInWithPopup(auth, googleProvider); } 
@@ -332,7 +325,7 @@ const DashboardView = ({ subjects, exams }) => {
   return (
     <div className="space-y-6 animate-in fade-in pt-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> Dashboard</h2>
+        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2"><LayoutDashboard className="text-blue-600"/> Dashboard Global</h2>
         <Button variant="purple" onClick={suggest} className="flex gap-2 items-center text-sm"><Lightbulb size={16}/> Coach</Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

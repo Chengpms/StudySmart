@@ -295,9 +295,8 @@ const DashboardView = ({ subjects, exams }) => {
   );
 };
 
-// 2. TO-DO VIEW (CON PERSISTENCIA LOCAL)
+// 2. TO-DO VIEW (ALGORITMO MEJORADO)
 const TodoView = ({ subjects, exams, todos, userId }) => {
-  // Persistencia local para configuración de sesión (no datos críticos, solo preferencias UI)
   const [hours, setHours] = useState(() => localStorage.getItem('sm_hours') || 2);
   const [sel, setSel] = useState(() => {
     try {
@@ -318,22 +317,36 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     const sels = Object.keys(sel).filter(k => sel[k]);
     const targets = sels.length > 0 ? sels : subjects.map(s => s.name);
     
-    if (!targets.length) return alert("No hay asignaturas disponibles. Añádelas en Configuración.");
+    if (!targets.length) return alert("No hay asignaturas disponibles.");
     
     const totalMins = hours * 60;
     let scores = {};
     const today = new Date(); today.setHours(0,0,0,0);
+    
     targets.forEach(name => {
       const s = subjects.find(sb => sb.name === name);
       if(!s) return;
       let base = (s.difficulty || 2) * 10;
       let minDays = 999;
+      
       exams.filter(e => e.subject === name).forEach(e => {
-         const d = new Date(e.date.split('/').reverse().join('-'));
-         const diff = Math.ceil((d - today)/86400000);
-         if(diff >= 0) minDays = Math.min(minDays, diff);
+         // Corrección de fecha para cálculo preciso
+         const parts = e.date.split('/');
+         if (parts.length === 3) {
+             const d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); // YYYY-MM-DD
+             const diff = Math.ceil((d - today)/86400000);
+             if(diff >= 0) minDays = Math.min(minDays, diff);
+         }
       });
-      if(minDays <= 2) base *= 10; else if(minDays <= 7) base *= 4;
+
+      // ALGORITMO MEJORADO DE URGENCIA
+      if (minDays === 0) base *= 30;      // Examen HOY
+      else if (minDays <= 1) base *= 20;  // Mañana
+      else if (minDays <= 3) base *= 12;  // Muy Crítico
+      else if (minDays <= 7) base *= 6;   // Esta semana
+      else if (minDays <= 14) base *= 3;  // Próxima semana
+      else if (minDays <= 30) base *= 1.5;// Vista mensual
+      
       scores[name] = base; 
     });
     
@@ -342,6 +355,8 @@ const TodoView = ({ subjects, exams, todos, userId }) => {
     for (const name of targets) {
       if(!scores[name]) continue;
       const mins = Math.floor(totalMins * (scores[name] / totalP));
+      
+      // Filtro: Solo ignorar si es muy poco tiempo Y no es urgente
       if (mins < 15 && scores[name] < 50) continue;
       
       const s = subjects.find(sb => sb.name === name);

@@ -34,7 +34,8 @@ import {
   LogIn,
   ChevronLeft,
   ChevronRight,
-  Flame
+  Flame,
+  Pause // <--- ¡AÑADIDO! Esto arregla el error "Pause is not defined"
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN FIREBASE ---
